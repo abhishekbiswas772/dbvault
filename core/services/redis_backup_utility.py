@@ -8,7 +8,7 @@ from typing import Any, Optional, Tuple
 import redis as redis_lib
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from core.helpers.blobstorage_uploader import upload_to_azure, upload_to_s3
+from core.helpers.blobstorage_uploader import dispatch_cloud_upload
 from core.helpers.cryptographic_helper import encrypt_file
 from core.interfaces.backup_utility_interface import DatabaseBackupManager
 
@@ -63,28 +63,7 @@ class RedisDatabaseBackupManager(DatabaseBackupManager):
             raise self.BackupError(e.stderr.decode())
 
     def _upload_to_cloud(self, file_path: str, **kwargs: Any) -> None:
-        provider = kwargs.get("cloud_provider", "").lower()
-
-        if provider == "s3":
-            bucket = kwargs.get("s3_bucket")
-            key = kwargs.get("s3_key", os.path.basename(file_path))
-            expected_owner = kwargs.get("s3_expected_owner")
-            if not bucket:
-                raise ValueError("s3_bucket is required for S3 uploads")
-            if not expected_owner:
-                raise ValueError("s3_expected_owner (AWS account ID) is required for S3 uploads")
-            upload_to_s3(file_path, bucket, key, expected_owner)
-
-        elif provider == "azure":
-            conn_str = kwargs.get("azure_conn_str")
-            container = kwargs.get("azure_container")
-            blob_name = kwargs.get("azure_blob_name", os.path.basename(file_path))
-            if not conn_str or not container:
-                raise ValueError("azure_conn_str and azure_container are required for Azure uploads")
-            upload_to_azure(file_path, conn_str, container, blob_name)
-
-        else:
-            raise ValueError(f"Unsupported cloud_provider: '{provider}'. Use 's3' or 'azure'.")
+        dispatch_cloud_upload(file_path, **kwargs)
 
     def backup(
         self,

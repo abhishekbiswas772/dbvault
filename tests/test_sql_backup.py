@@ -60,10 +60,10 @@ class TestUploadToCloud:
 
     def test_unknown_provider_raises(self, manager):
         with pytest.raises(ValueError, match="Unsupported"):
-            manager._upload_to_cloud("/f.gz", cloud_provider="gcs")
+            manager._upload_to_cloud("/f.gz", cloud_provider="dropbox")
 
     def test_s3_upload_dispatched(self, manager):
-        with patch("core.services.sql_backup_utility.upload_to_s3") as mock_s3:
+        with patch("core.helpers.blobstorage_uploader.upload_to_s3") as mock_s3:
             manager._upload_to_cloud(
                 "/f.gz",
                 cloud_provider="s3",
@@ -73,7 +73,7 @@ class TestUploadToCloud:
             mock_s3.assert_called_once()
 
     def test_azure_upload_dispatched(self, manager):
-        with patch("core.services.sql_backup_utility.upload_to_azure") as mock_az:
+        with patch("core.helpers.blobstorage_uploader.upload_to_azure") as mock_az:
             manager._upload_to_cloud(
                 "/f.gz",
                 cloud_provider="azure",

@@ -1,12 +1,9 @@
 import asyncio
 import os
-import re
 import sys
 from importlib.metadata import PackageNotFoundError, version
-
 import click
 import pyfiglet
-
 from core.helpers.cryptographic_helper import decrypt_file, generate_key
 from core.services.ibm_db2_backup_uitlity import IBMDB2DatabaseBackupManager
 from core.services.mongo_backup_utility import MongoDatabaseBackupManager
@@ -45,13 +42,10 @@ def _banner() -> None:
 @click.version_option(__version__, "-V", "--version", prog_name="dbvault")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    """DBVault — encrypted, cloud-ready database backup utility."""
     if ctx.invoked_subcommand is None:
         _banner()
         click.echo(ctx.get_help())
 
-
-# ── backup ────────────────────────────────────────────────────────────────────
 
 @cli.command()
 @click.option(
@@ -81,7 +75,7 @@ def cli(ctx: click.Context) -> None:
 )
 @click.option(
     "--cloud", "-c", default=None,
-    type=click.Choice(["s3", "azure"], case_sensitive=False),
+    type=click.Choice(["s3", "azure", "gcs", "minio"], case_sensitive=False),
     help="Upload the finished backup to cloud storage.",
 )
 @click.option("--s3-bucket", default=None, help="S3 bucket name.")
@@ -93,21 +87,33 @@ def cli(ctx: click.Context) -> None:
 @click.option("--azure-conn-str", default=None, help="Azure Storage connection string.")
 @click.option("--azure-container", default=None, help="Azure Blob container name.")
 @click.option("--azure-blob", default=None, help="Blob name (defaults to the backup filename).")
+@click.option("--gcs-bucket", default=None, help="GCS bucket name.")
+@click.option("--gcs-blob", default=None, help="GCS object/blob name (defaults to filename).")
+@click.option(
+    "--gcs-credentials", default=None,
+    help="Path to GCS service account JSON (defaults to GOOGLE_APPLICATION_CREDENTIALS env var).",
+)
+@click.option("--minio-endpoint", default=None, help="MinIO server endpoint (e.g. localhost:9000).")
+@click.option("--minio-access-key", default=None, help="MinIO access key.")
+@click.option("--minio-secret-key", default=None, help="MinIO secret key.")
+@click.option("--minio-bucket", default=None, help="MinIO bucket name.")
+@click.option("--minio-object", default=None, help="MinIO object name (defaults to filename).")
+@click.option("--minio-secure/--no-minio-secure", default=True, help="Use TLS for MinIO (default: on).")
 @click.option("--async-mode", "-a", is_flag=True, help="Run the pipeline asynchronously.")
 def backup( #NOSONAR
     db, host, user, password, database, output, #NOSONAR
     encrypt, key, cloud,
     s3_bucket, s3_key, s3_owner,
     azure_conn_str, azure_container, azure_blob,
+    gcs_bucket, gcs_blob, gcs_credentials,
+    minio_endpoint, minio_access_key, minio_secret_key, minio_bucket, minio_object, minio_secure,
     async_mode,
 ) -> None:
-    """Run a database backup pipeline: dump → validate → compress → [encrypt] → [upload]."""
     _banner()
 
     if password is None:
         password = click.prompt("  Password", hide_input=True, default="", prompt_suffix=" ")
 
-    # ── encryption ────────────────────────────────────────────────────────────
     encryption_key: bytes | None = None
     if encrypt:
         if key:
@@ -119,7 +125,6 @@ def backup( #NOSONAR
                 + click.style(f"     {encryption_key.decode()}\n", fg="bright_yellow", bold=True)
             )
 
-    # ── cloud kwargs ──────────────────────────────────────────────────────────
     kwargs: dict = {}
     if cloud:
         kwargs["cloud_provider"] = cloud
@@ -141,11 +146,34 @@ def backup( #NOSONAR
             kwargs["azure_container"] = azure_container
             if azure_blob:
                 kwargs["azure_blob_name"] = azure_blob
+        elif cloud == "gcs":
+            if not gcs_bucket:
+                raise click.UsageError("--gcs-bucket is required for GCS uploads.")
+            kwargs["gcs_bucket"] = gcs_bucket
+            if gcs_blob:
+                kwargs["gcs_blob_name"] = gcs_blob
+            if gcs_credentials:
+                kwargs["gcs_credentials"] = gcs_credentials
+        elif cloud == "minio":
+            if not minio_endpoint:
+                raise click.UsageError("--minio-endpoint is required for MinIO uploads.")
+            if not minio_access_key:
+                raise click.UsageError("--minio-access-key is required for MinIO uploads.")
+            if not minio_secret_key:
+                raise click.UsageError("--minio-secret-key is required for MinIO uploads.")
+            if not minio_bucket:
+                raise click.UsageError("--minio-bucket is required for MinIO uploads.")
+            kwargs["minio_endpoint"] = minio_endpoint
+            kwargs["minio_access_key"] = minio_access_key
+            kwargs["minio_secret_key"] = minio_secret_key
+            kwargs["minio_bucket"] = minio_bucket
+            kwargs["minio_secure"] = minio_secure
+            if minio_object:
+                kwargs["minio_object_name"] = minio_object
 
     if encryption_key:
         kwargs["encryption_key"] = encryption_key
 
-    # ── run pipeline ──────────────────────────────────────────────────────────
     os.makedirs(output, exist_ok=True)
     manager = DB_MANAGERS[db.lower()]()
 
@@ -180,8 +208,6 @@ def backup( #NOSONAR
         sys.exit(1)
 
 
-# ── keygen ────────────────────────────────────────────────────────────────────
-
 @cli.command()
 @click.option(
     "--save", "-s", default=None,
@@ -189,7 +215,6 @@ def backup( #NOSONAR
     help="Write the key to a file instead of only printing it.",
 )
 def keygen(save: str | None) -> None:
-    """Generate a new Fernet encryption key."""
     _banner()
     key = generate_key()
     click.echo(click.style("  Generated encryption key:", fg="yellow"))
@@ -200,8 +225,6 @@ def keygen(save: str | None) -> None:
         click.echo(click.style(f"\n  Key saved → {save}", fg="green"))
 
 
-# ── decrypt ───────────────────────────────────────────────────────────────────
-
 @cli.command()
 @click.option(
     "--file", "-f", required=True,
@@ -210,7 +233,6 @@ def keygen(save: str | None) -> None:
 )
 @click.option("--key", "-k", required=True, help="Base64 Fernet key used during encryption.")
 def decrypt(file: str, key: str) -> None:
-    """Decrypt a Fernet-encrypted backup file."""
     _banner()
     click.echo(click.style(f"  Decrypting: {file}", fg="bright_white"))
     try:

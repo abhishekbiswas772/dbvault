@@ -202,6 +202,151 @@ class TestBackupSQLite:
         )
         assert result.exit_code != 0
 
+class TestBackupValidationGCS:
+    def test_gcs_missing_bucket_fails(self, runner, tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "backup", "--db", "sqlite",
+                "--database", "/nonexistent.db",
+                "--output", str(tmp_path),
+                "--cloud", "gcs",
+            ],
+            input="password\n",
+        )
+        assert result.exit_code != 0
+
+    def test_gcs_with_credentials_passes_validation(self, runner, sample_sqlite_db, tmp_path):
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "core.helpers.blobstorage_uploader.upload_to_gcs"
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "backup", "--db", "sqlite",
+                    "--database", sample_sqlite_db,
+                    "--output", str(tmp_path),
+                    "--cloud", "gcs",
+                    "--gcs-bucket", "my-bucket",
+                    "--gcs-credentials", "/fake/creds.json",
+                ],
+                input="irrelevant\n",
+            )
+        # CLI kwargs validation passes (upload itself may fail, but no UsageError)
+        assert "gcs-bucket" not in result.output.lower()
+
+    def test_gcs_bucket_only_passes_validation(self, runner, sample_sqlite_db, tmp_path):
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "core.helpers.blobstorage_uploader.upload_to_gcs"
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "backup", "--db", "sqlite",
+                    "--database", sample_sqlite_db,
+                    "--output", str(tmp_path),
+                    "--cloud", "gcs",
+                    "--gcs-bucket", "my-bucket",
+                ],
+                input="irrelevant\n",
+            )
+        assert "gcs-bucket" not in result.output.lower()
+
+
+class TestBackupValidationMinio:
+    def test_minio_missing_endpoint_fails(self, runner, tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "backup", "--db", "sqlite",
+                "--database", "/nonexistent.db",
+                "--output", str(tmp_path),
+                "--cloud", "minio",
+                "--minio-access-key", "ak",
+                "--minio-secret-key", "sk",
+                "--minio-bucket", "bucket",
+            ],
+            input="password\n",
+        )
+        assert result.exit_code != 0
+
+    def test_minio_missing_access_key_fails(self, runner, tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "backup", "--db", "sqlite",
+                "--database", "/nonexistent.db",
+                "--output", str(tmp_path),
+                "--cloud", "minio",
+                "--minio-endpoint", "localhost:9000",
+                "--minio-secret-key", "sk",
+                "--minio-bucket", "bucket",
+            ],
+            input="password\n",
+        )
+        assert result.exit_code != 0
+
+    def test_minio_missing_secret_key_fails(self, runner, tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "backup", "--db", "sqlite",
+                "--database", "/nonexistent.db",
+                "--output", str(tmp_path),
+                "--cloud", "minio",
+                "--minio-endpoint", "localhost:9000",
+                "--minio-access-key", "ak",
+                "--minio-bucket", "bucket",
+            ],
+            input="password\n",
+        )
+        assert result.exit_code != 0
+
+    def test_minio_missing_bucket_fails(self, runner, tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "backup", "--db", "sqlite",
+                "--database", "/nonexistent.db",
+                "--output", str(tmp_path),
+                "--cloud", "minio",
+                "--minio-endpoint", "localhost:9000",
+                "--minio-access-key", "ak",
+                "--minio-secret-key", "sk",
+            ],
+            input="password\n",
+        )
+        assert result.exit_code != 0
+
+    def test_minio_no_secure_flag_accepted(self, runner, sample_sqlite_db, tmp_path):
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "core.helpers.blobstorage_uploader.upload_to_minio"
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "backup", "--db", "sqlite",
+                    "--database", sample_sqlite_db,
+                    "--output", str(tmp_path),
+                    "--cloud", "minio",
+                    "--minio-endpoint", "localhost:9000",
+                    "--minio-access-key", "ak",
+                    "--minio-secret-key", "sk",
+                    "--minio-bucket", "bucket",
+                    "--no-minio-secure",
+                ],
+                input="irrelevant\n",
+            )
+        assert "minio-endpoint" not in result.output.lower()
+
+    def test_backup_help_shows_gcs_minio_options(self, runner):
+        result = runner.invoke(cli, ["backup", "--help"])
+        assert result.exit_code == 0
+        assert "--gcs-bucket" in result.output
+        assert "--minio-endpoint" in result.output
+        assert "--no-minio-secure" in result.output
+
+
 def _extract_fernet_key(output: str) -> str | None:
     for word in output.split():
         stripped = word.strip()
