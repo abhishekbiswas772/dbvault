@@ -134,7 +134,7 @@ dbvault backup \
   # Uses MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables
 ```
 
-### 4. Decrypt a backup
+### 6. Decrypt a backup
 
 ```bash
 dbvault decrypt \
@@ -142,7 +142,7 @@ dbvault decrypt \
   --key <your-fernet-key>
 ```
 
-### 5. Generate an encryption key
+### 7. Generate an encryption key
 
 ```bash
 dbvault keygen
