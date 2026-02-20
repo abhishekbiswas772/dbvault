@@ -1,13 +1,71 @@
 [project]
-name = "db-backup-utility"
+name = "dbvault"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-database backup utility with Fernet encryption, S3/Azure cloud upload, async execution, and retry logic"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = [
+    "database", "backup", "encryption", "mysql", "postgresql",
+    "mongodb", "redis", "sqlite", "ibm-db2", "s3", "azure", "cli",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Security :: Cryptography",
+    "Environment :: Console",
+]
 dependencies = [
     "azure-storage-blob>=12.28.0",
     "boto3>=1.42.53",
+    "click>=8.1",
     "cryptography>=46.0.5",
+    "psycopg2-binary>=2.9.11",
+    "pyfiglet>=1.0",
+    "pymongo>=4.10",
     "pymysql>=1.1.2",
+    "redis>=5.2",
     "tenacity>=9.1.4",
+]
+
+[project.scripts]
+dbvault = "cli.app:main"
+
+[project.urls]
+Homepage = "https://github.com/Abhishek772/dbvault"
+Repository = "https://github.com/Abhishek772/dbvault"
+Issues = "https://github.com/Abhishek772/dbvault/issues"
+Changelog = "https://github.com/Abhishek772/dbvault/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-mock>=3.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli", "core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-mock>=3.14",
 ]

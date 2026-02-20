@@ -29,6 +29,7 @@ def decrypt_file(enc_path: str, key: bytes) -> str:
             data = fernet.decrypt(file.read())
         with open(output, "wb") as file:
             file.write(data)
+        os.remove(enc_path)
         return output
     except Exception as e:
         raise ValueError(f"Some error occured when doing encryption {str(e)}")
