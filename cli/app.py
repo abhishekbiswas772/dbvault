@@ -15,7 +15,7 @@ from core.services.sqllite_backup_utility import SQLiteDatabaseBackupManager
 try:
     __version__ = version("dbvault")
 except PackageNotFoundError:
-    __version__ = "0.1.0"
+    __version__ = "0.1.3"
 
 DB_MANAGERS = {
     "mysql": SQLDatabaseBackupManager,
