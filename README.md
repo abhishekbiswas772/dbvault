@@ -9,7 +9,7 @@
 
 **Encrypted · Cloud-ready · Multi-database backup utility**
 
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/dbvault.svg)](https://pypi.org/project/dbvault/)
 [![Tests](https://img.shields.io/badge/tests-pytest-orange.svg)](tests/)
@@ -25,7 +25,7 @@ DBVault is a command-line backup utility that gives you a consistent pipeline ac
 | **6 database engines** | MySQL, PostgreSQL, MongoDB, Redis, SQLite, IBM Db2 |
 | **Gzip compression** | Every backup is compressed before storage |
 | **Fernet encryption** | Optional AES-128-CBC + HMAC-SHA256 (symmetric, authenticated) |
-| **Cloud upload** | AWS S3 (with `ExpectedBucketOwner`) and Azure Blob Storage |
+| **Cloud upload** | AWS S3, Azure Blob Storage, Google Cloud Storage (GCS), and MinIO |
 | **Retry + backoff** | 3 attempts, exponential 2–10 s (powered by `tenacity`) |
 | **Async execution** | `async_perform_backup_pipeline` via `asyncio.to_thread` |
 | **Validation** | Each backup is restored to a temp target and verified before being kept |
@@ -105,6 +105,35 @@ dbvault backup \
   --s3-owner 123456789012
 ```
 
+### 4. Back up directly to GCP Cloud Storage
+
+```bash
+dbvault backup \
+  --db postgres \
+  --host localhost \
+  --user admin \
+  --database mydb \
+  --output ./backups \
+  --cloud gcp \
+  --gcp-bucket my-gcp-backup-bucket
+  # Uses GOOGLE_APPLICATION_CREDENTIALS environment variable
+```
+
+### 5. Back up to MinIO
+
+```bash
+dbvault backup \
+  --db mongo \
+  --host localhost \
+  --user admin \
+  --database myapp \
+  --output ./backups \
+  --cloud minio \
+  --minio-endpoint play.min.io \
+  --minio-bucket my-minio-bucket
+  # Uses MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables
+```
+
 ### 4. Decrypt a backup
 
 ```bash
@@ -137,13 +166,18 @@ Options:
   -o, --output   PATH    Output directory  [required]
   -e, --encrypt          Fernet-encrypt the backup
   -k, --key      TEXT    Existing Fernet key (generated if --encrypt and omitted)
-  -c, --cloud    [s3|azure]  Upload to cloud after backup
+  -c, --cloud    [s3|azure|gcp|minio]  Upload to cloud after backup
   --s3-bucket    TEXT    S3 bucket name
   --s3-key       TEXT    S3 object key
   --s3-owner     TEXT    Expected S3 bucket owner — 12-digit AWS account ID
   --azure-conn-str TEXT  Azure Storage connection string
   --azure-container TEXT Azure container name
   --azure-blob   TEXT    Azure blob name
+  --gcp-bucket   TEXT    GCP bucket name
+  --gcp-blob     TEXT    GCP blob name (optional)
+  --minio-endpoint TEXT  MinIO endpoint URL
+  --minio-bucket TEXT    MinIO bucket name
+  --minio-object TEXT    MinIO object name (optional)
   -a, --async-mode       Run asynchronously
   -h, --help             Show this message and exit.
 ```
@@ -180,7 +214,7 @@ DatabaseBackupManager (ABC)
      ├── validate()             — restore to temp target, verify, drop
      ├── compress()             — gzip the dump file
      ├── encrypt()              — Fernet encrypt (optional)
-     ├── _upload_to_cloud()     — S3 / Azure upload (optional)
+     ├── _upload_to_cloud()     — S3 / Azure / GCP / MinIO upload (optional)
      └── perform_backup_pipeline()   ← @retry(3×, exp backoff 2-10 s)
          async_perform_backup_pipeline()  ← asyncio.to_thread wrapper
 ```
@@ -191,7 +225,7 @@ core/
 │   └── backup_utility_interface.py   # Abstract base class
 ├── helpers/
 │   ├── cryptographic_helper.py       # Fernet generate / encrypt / decrypt
-│   └── blobstorage_uploader.py       # S3 + Azure upload (sync + async)
+│   └── blobstorage_uploader.py       # S3, Azure, GCP, MinIO upload (sync + async)
 └── services/
     ├── sql_backup_utility.py         # MySQL
     ├── postgres_backup_utility.py    # PostgreSQL
